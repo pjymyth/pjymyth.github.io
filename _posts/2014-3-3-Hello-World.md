@@ -1,10 +1,124 @@
 ---
 layout: post
-title: You're up and running!
+title: 如何用Aple Podcast听Bilibili频道
 ---
 
 Next you can update your site name, avatar and other options using the _config.yml file in the root of your repository (shown below).
 
 ![_config.yml]({{ site.baseurl }}/images/config.png)
 
-The easiest way to make your first post is to edit this one. Go into /_posts/ and update the Hello World markdown file. For more instructions head over to the [Jekyll Now repository](https://github.com/barryclark/jekyll-now) on GitHub.
+Youtube 作为全球最大的视频网站，毫无疑问有很多不错的视频节目，其中有一些是谈话类的单口节目，如果内容与视频本身关系不大，其实可以将其转换成音频进行收听。但自己一期一期下载节目进行转换未免也太过麻烦，笔者作为播客重度用户，自然而然地想到了 Youtube 转播客这条路。
+网上的解决方案早已有之，Podsync 曾经是最火的 YouTube2Podcast 线上服务，但其生成 Youtube 视频的纯音频 RSS 需要支付 $1/mo 的服务费。另外由于树大招风，今年三月被 YouTube 杀掉了其所有 API keys 而关门歇业。
+开发者无私开源了 Podsync 的服务端程序，在自备 VPS 和 Youtube API 的前提下，我们可以搭建属于自己的 YouTube2Podcast 服务。
+订阅视频RSS
+如果你只是想通过播客客户端订阅 Youtube 频道，Youtube 已经为你提供了官方的 RSS Feed，不需要使用 Podsync 进行转换。
+频道链接：https://www.youtube.com/feeds/videos.xml?channel_id=<频道id> RSS 链接：https://www.youtube.com/feeds/videos.xml?channel_id=<频道id>
+举个栗子， 频道链接：http://www.youtube.com/channel/UCxJGMJbjokfnr2-s4_RXPxQ RSS 链接：https://www.youtube.com/feeds/videos.xml?channel_id=UCxJGMJbjokfnr2-s4_RXPxQ
+不过对观众来说此类需求实在太少，比起 Youtube App，除了不用看广告以外，我没想到有什么优势。本文主要还是对音频播客爱好者进行指导，请往下看。
+准备工作
+1. 一个运转正常的 VPS，用于运行 PodSync 生成 RSS，并提供公网访问。 至于怎么搞定 VPS，网上有很多教程，此处不赘述。 本教程基于 Ubuntu OS。其他操作系统只需想办法安装 docker 即可，其他步骤都相同。
+2. Youtube API，用于 Podsync 获取 Youtube 的频道、视频等信息。
+创建 Youtube API
+1. 登陆Google Cloud Platform
+2. ￼
+3. 新建项目时「项目名称」随意（不可使用中文），「位置」选择 无组织 即可
+4. ￼
+5. 项目创建成功后会自动跳转项目列表页，点击进入「菜单」 - 「API 和服务」 - 「信息中心」
+6. ￼
+7. 确认当前「信息中心」属于刚刚创建的项目，然后点击「启用 API 和服务」，并在列表中找到 YouTube Data API v3，点击进入 API 详情页。
+8. ￼
+9. ￼
+10. 在 API 详情页点击「启用」，启用成功后在配置页面点击「创建凭据」
+11. ￼
+12. ￼
+13. 创建凭据时，如图依次选择 YouTube Data API v3，网络浏览器(Javascript) 和公开数据，然后点击「我需要那些凭据」
+14. ￼
+15. 在弹出的「获取凭据」步骤内，「API 密钥」即为我们所需的 API Key，复制下来备用，然后点击「完成」即可
+16. ￼
+安装 docker
+# 移除旧 docker
+apt-get remove docker docker-engine docker.io containerd runc
+
+# 更新软件源
+apt-get update
+
+# 安装必要程序
+apt-get install \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg-agent \
+    software-properties-common
+
+# 添加 docker 软件源
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+
+# 验证一下源的指纹
+apt-key fingerprint 0EBFCD88
+
+# 更新源
+apt-get update
+
+# 安装 docker
+apt-get install docker-ce docker-ce-cli containerd.io
+安装完成后运行 docker info，如果有显示信息，说明安装成功
+安装 Podsync
+本例中使用 /data/www/podsync 作为 Podsync 的目录，先创建程序目录和数据目录：
+mkdir /data/www/podsync/data -P && cd /data/www/podsync
+配置 Podsync
+创建一个配置文件 /data/www/podsync/config.toml
+下面是一个配置文件范例，只需修改 [feeds.ID1] 中的 URL 部分即可：
+[server]
+port = 8080
+hostname = "http://127.0.0.1" # 此处填写 IP 地址或者域名，如果有HTTPS证书的话记得改成 https://
+data_dir = "/app/data" # 不要改动这个地方！
+
+# Tokens from `Access tokens` section
+[tokens]
+youtube = "XriA7WSI3qOLkXriA7WSI3qOLkXriA7WSI3qOLk" # 引号内填写 YouTube API Key.
+
+[feeds]
+  [feeds.ID1]
+  # ID1 为最终生成的RSS文件的名称，可以修改
+  url = "www.youtube.com/channel/UCtAIPjABiQD3qjlEl1T5VpA" # 引号内填写Youtube频道/组织/用户/播放列表的链接，注意不要有 http:// 部分！！！
+  page_size = 10 # 每次更新节目时的分页大小
+  update_period = "12h" # 更新周期，例如: "60m", "4h", "2h45m"
+  quality = "high" # 文件品质高-high，或低-low
+  format = "audio" # 文件类型音频-audio，视频-video，通常播客使用音频类型即可
+  # filters = { title = "111", not_title = "222", description = "333", not_description = "444" } # [可选项，使用时去除行首井号]过滤节目，只保留「标题含有111，不含222，描述包含 333，不含 444 的节目」
+  clean = { keep_last = 10 } # 自动清理，只保留最近10期节目
+  # 可以配置多个 feeds
+  [feeds.ID2]
+  url = "{www.youtube.com/channel/xxxxxxxxxxxxxxxxxxx}"
+  page_size = 10
+  update_period = "12h"
+  quality = "high"
+  format = "audio"
+
+[database]
+  badger = { truncate = true, file_io = true } # 数据库配置，无需改动
+
+[downloader]
+self_update = true # 自动更新下载程序
+
+# 程序运行日志配置，无需改动
+[log]
+filename = "podsync.log"
+max_size = 50 # MB
+max_age = 30 # days
+max_backups = 7
+compress = true
+运行 Podsync
+cd /data/www/podsync
+
+docker run \
+    -d \
+    -p 8080:8080 \
+    -v $(pwd)/data:/app/data/ \
+    -v $(pwd)/config.toml:/app/config.toml \
+    mxpv/podsync:latest
+让子弹飞一会儿，然后访问 http://IP:8080 查看是否有如下结构的文件树：
+ID1/
+ID1.xml
+podsync.opml
+大功告成！YouTube 视频 ID1 对应的播客 RSS 链接为： http://IP:8080/ID1.xml
